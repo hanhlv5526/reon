@@ -1,0 +1,40 @@
+name: Deploy to Google Cloud
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Authenticate with Google Cloud
+        uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Docker
+        run: |
+          gcloud auth configure-docker
+
+      - name: Build and push Docker image
+        run: |
+          docker build -t gcr.io/${{ secrets.GCP_PROJECT_ID }}/myapp:latest .
+          docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/myapp:latest
+
+      - name: Deploy to Google Cloud VM
+        uses: appleboy/ssh-action@v0.1.6
+        with:
+          host: ${{ secrets.GCE_INSTANCE_IP }}
+          username: ${{ secrets.GCE_INSTANCE_USER }}
+          key: ${{ secrets.GCP_SSH_KEY }}
+          script: |
+            cd /home/${{ secrets.GCE_INSTANCE_USER }}/reon
+            docker-compose pull
+            docker-compose up -d --build
+            docker system prune -af
